@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Phone, Mail, Apple, PlayCircle, Heart, ArrowRight, Menu, X, Fuel, Settings, Users, Star } from "lucide-react"
+import { Phone, Mail, Apple, PlayCircle, Heart, ArrowRight, Menu, X, Fuel, Settings, Users, Star, Car, Gauge, MapPin, Calendar, Wind } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import axios from "axios"
@@ -61,39 +61,39 @@ export default function Home() {
     }
   }
 
-const fetchVehicleReviews = async (vehicleId) => {
-  setReviewsLoading(true);
-  try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/reviews/reviews/`
-    );
-    
-    // Filter reviews by vehicle ID on the client side
-    const vehicleReviews = response.data.data.filter(
-      (review) => review.vehicle.id === parseInt(vehicleId)
-    );
-    
-    const formattedReviews = vehicleReviews.map((item) => ({
-      id: item.id,
-      name: item.title || "Anonymous",
-      username: item.user_name || "Anonymous",
-      date: new Date(item.created_at).toLocaleDateString("en-US", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }),
-      rating: item.rating,
-      avatar: "/man.png",
-      text: item.context,
-    }));
-    
-    setReviews(formattedReviews);
-  } catch (error) {
-    console.error("Review Fetch Error:", error);
-  } finally {
-    setReviewsLoading(false);
-  }
-};
+  const fetchVehicleReviews = async (vehicleId) => {
+    setReviewsLoading(true);
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/reviews/reviews/`
+      );
+      
+      // Filter reviews by vehicle ID on the client side
+      const vehicleReviews = response.data.data.filter(
+        (review) => review.vehicle.id === parseInt(vehicleId)
+      );
+      
+      const formattedReviews = vehicleReviews.map((item) => ({
+        id: item.id,
+        name: item.title || "Anonymous",
+        username: item.user_name || "Anonymous",
+        date: new Date(item.created_at).toLocaleDateString("en-US", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }),
+        rating: item.rating,
+        avatar: "/man.png",
+        text: item.context,
+      }));
+      
+      setReviews(formattedReviews);
+    } catch (error) {
+      console.error("Review Fetch Error:", error);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
 
   const fetchSimilarVehicles = async (vehicleTypeId, currentVehicleId) => {
     try {
@@ -176,7 +176,7 @@ const fetchVehicleReviews = async (vehicleId) => {
             key={star}
             type={interactive ? "button" : undefined}
             onClick={interactive ? () => onRate(star) : undefined}
-            className={interactive ? "focus:outline-none" : ""}
+            className={interactive ? "focus:outline-none" : undefined}
             disabled={!interactive}
           >
             <svg
@@ -274,41 +274,155 @@ const fetchVehicleReviews = async (vehicleId) => {
               </div>
             </div>
 
-            <p className="text-4xl sm:text-xl md:text-3xl font-medium text-gray-700 mt-2">
-              {vehicle?.vehicle_model
-                ? `${vehicle.vehicle_model} is a premium ${vehicle.vehicle_type?.name || "vehicle"} with ${vehicle.gear_box} transmission and ${vehicle.fuel} fuel type.`
-                : "Vehicle description not available."}
+            <p className="text-lg text-gray-600 mt-2">
+              {vehicle?.vehicle_model || "Model information not available"}
             </p>
 
-            <div className="grid grid-cols-2 gap-4 py-4 border-y border-gray-200">
-              <div className="space-y-1">
-                <span className="text-gray-500 text-sm">Type</span>
-                <p className="font-semibold text-gray-700">{vehicle?.vehicle_type?.name || "N/A"}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-gray-500 text-sm">Capacity</span>
-                <p className="font-semibold text-gray-700">{vehicle?.vehicle_seat?.capacity || "N/A"} Person</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-gray-500 text-sm">Transmission</span>
-                <p className="font-semibold text-gray-700">{vehicle?.gear_box || "N/A"}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-gray-500 text-sm">Fuel</span>
-                <p className="font-semibold text-gray-700">{vehicle?.fuel || "N/A"}</p>
+            {/* Detailed Vehicle Specifications */}
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Vehicle Specifications</h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Vehicle Type */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 rounded-lg">
+                    <Car className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Vehicle Type</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.vehicle_type?.name || "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Capacity */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-50 rounded-lg">
+                    <Users className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Seating Capacity</p>
+                    <p className="font-semibold text-gray-800">
+                      {vehicle?.vehicle_seat?.capacity || "N/A"} Persons
+                    </p>
+                  </div>
+                </div>
+
+                {/* Fuel Type */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-50 rounded-lg">
+                    <Fuel className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Fuel Type</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.fuel || "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Transmission */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-50 rounded-lg">
+                    <Settings className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Transmission</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.gear_box || "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Air Conditioner */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-50 rounded-lg">
+                    <Wind className="w-5 h-5 text-cyan-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Air Conditioner</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.air_conditioner || "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Distance */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-red-50 rounded-lg">
+                    <Gauge className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Distance</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.distance || "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Availability */}
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 rounded-lg">
+                    <MapPin className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Availability</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.Avaialbilty || "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Vehicle Share */}
+                {/* <div className="flex items-center gap-3">
+                  <div className="p-2 bg-yellow-50 rounded-lg">
+                    <Users className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Vehicle Share</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.vehicle_share || "N/A"}</p>
+                  </div>
+                </div> */}
+
+                {/* Zip Code */}
+                {/* <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <MapPin className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Zip Code</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.Zip_code || "N/A"}</p>
+                  </div>
+                </div> */}
+
+                {/* Vehicle Number */}
+                {/* <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <Car className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Vehicle Number</p>
+                    <p className="font-semibold text-gray-800">{vehicle?.vehicle_number || "N/A"}</p>
+                  </div>
+                </div> */}
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            {/* Additional Information */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="font-medium text-gray-800 mb-2">Additional Information</h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p><span className="font-medium">Status:</span> {vehicle?.status || "N/A"}</p>
+                {vehicle?.approval_date && (
+                  <p><span className="font-medium">Approval Date:</span> {vehicle.approval_date}</p>
+                )}
+                {vehicle?.equipment?.name && (
+                  <p><span className="font-medium">Equipment:</span> {vehicle.equipment.name}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Price and Rent Button */}
+            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
               <div>
                 <p className="text-2xl font-bold text-gray-900">
                   ${vehicle?.price || "0"}
                   <span className="text-gray-500 text-lg font-normal">/day</span>
                 </p>
+                <p className="text-sm text-gray-500 mt-1">Inclusive of all taxes</p>
               </div>
               <button
                 onClick={handleClick1}
-                className="bg-gray-700 hover:bg-gray-800 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
+                className="bg-gray-700 hover:bg-gray-800 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-sm hover:shadow-md"
               >
                 Rent Now
               </button>
@@ -505,7 +619,7 @@ const fetchVehicleReviews = async (vehicleId) => {
                     <img
                       src={vehicle.image}
                       alt={vehicle.name}
-                      className="obejct-cover w-full h-full "
+                      className="object-cover w-full h-full"
                       onError={(e) => {
                         e.target.src = "/placeholder.svg"
                       }}

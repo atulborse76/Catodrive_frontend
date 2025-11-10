@@ -92,30 +92,45 @@ const handleSearch = async () => {
     const availableCars = approvedCars.filter(car => {
       // Find bookings for this car
       const carBookings = bookingsResponse.data.data.filter(
-        booking => booking.vehicle.id === car.id
+        booking => booking.vehicle === car.id
       );
+      
+      // If no bookings for this car, it's available
+      if (carBookings.length === 0) {
+        return true;
+      }
       
       // Check if any booking overlaps with our selected dates
       const isBooked = carBookings.some(booking => {
-        // Create Date objects for booking dates
+        // Create Date objects for booking dates (combining date and time)
         const bookingPickupDate = new Date(`${booking.pick_up_Date}T${booking.pick_up_time}`);
         const bookingDropoffDate = new Date(`${booking.drop_of_Date}T${booking.drop_of_time}`);
         
         // Create Date objects for search dates
-        const searchPickupDate = pickupDate;
-        const searchDropoffDate = returnDate;
+        const searchPickupDate = new Date(pickupDate);
+        const searchDropoffDate = new Date(returnDate);
         
-        // Check for overlap (simplified check - you might need more precise logic)
-        return (
-          (searchPickupDate >= bookingPickupDate && searchPickupDate <= bookingDropoffDate) ||
-          (searchDropoffDate >= bookingPickupDate && searchDropoffDate <= bookingDropoffDate) ||
-          (searchPickupDate <= bookingPickupDate && searchDropoffDate >= bookingDropoffDate)
+        console.log(`Car ${car.id}: Checking booking ${booking.id}`);
+        console.log(`Booking period: ${bookingPickupDate} to ${bookingDropoffDate}`);
+        console.log(`Search period: ${searchPickupDate} to ${searchDropoffDate}`);
+        
+        // Check for date overlap - if search period overlaps with booking period
+        const hasOverlap = (
+          searchPickupDate < bookingDropoffDate && 
+          searchDropoffDate > bookingPickupDate
         );
+        
+        console.log(`Has overlap: ${hasOverlap}`);
+        
+        return hasOverlap;
       });
       
-      // Only include if not booked
+      // Only include if not booked during the selected period
       return !isBooked;
     });
+    
+    console.log("Available cars:", availableCars.length);
+    console.log("All approved cars:", approvedCars.length);
     
     setSearchResults(availableCars);
     setShowResults(true);
@@ -130,7 +145,8 @@ const handleSearch = async () => {
   } catch (error) {
     console.error("Error fetching bookings:", error);
     // Fallback to just showing approved cars if bookings can't be fetched
-    setSearchResults(cars.filter(car => car.status === "approved"));
+    const approvedCars = cars.filter(car => car.status === "approved");
+    setSearchResults(approvedCars);
     setShowResults(true);
   }
 };

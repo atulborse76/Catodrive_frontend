@@ -455,7 +455,7 @@ export default function VehicleForm() {
 
                 <div className="space-y-2">
                   <label className="block text-md font-semibold text-gray-700 mb-2">
-                    Distance (KM) <span className="text-orange-500">*</span>
+                    Distance (Miles) <span className="text-orange-500">*</span>
                   </label>
                   <input
                     type="text"
