@@ -119,9 +119,13 @@ export default function CarRentalForm() {
   const [uploadedDocs, setUploadedDocs] = useState(null)
   const [availableLocations, setAvailableLocations] = useState([])
   const [reviews, setReviews] = useState([])
-  const [customerId, setCustomerId] = useState(
-    typeof window !== 'undefined' ? localStorage.getItem('customerId') : null
-  )
+ const [customerId, setCustomerId] = useState(
+  typeof window !== 'undefined' ? localStorage.getItem('customerId') : null
+)
+
+const [authType, setAuthType] = useState(
+  typeof window !== 'undefined' ? localStorage.getItem('authType') : null
+)
   const [bookedDates, setBookedDates] = useState([]);
   
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -401,56 +405,109 @@ const fetchBookedDates = async (vehicleId) => {
   }, [vehicle?.id]);
 
   // Location fetching
-  useEffect(() => {
-    if (currentStep === 1 && navigator.geolocation) {
+// Automatic location fetching
+useEffect(() => {
+  const autoFillLocation = async () => {
+    // Only run once when user reaches step 1 and fields are empty
+    if (currentStep === 1 && navigator.geolocation && !billingData.city) {
       setIsFetchingLocation(true)
+      console.log("Auto-filling location...")
       
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords
-            const response = await axios.get(
-              `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=AIzaSyDBVacETwtRCfrK9FJo0ee3gUQA-ImyCPc`
-            )
-            
-            if (response.data.results.length > 0) {
-              const result = response.data.results[0]
-              const addressComponents = result.address_components
-              
-              const streetNumber = addressComponents.find(c => c.types.includes('street_number'))?.long_name || ''
-              const route = addressComponents.find(c => c.types.includes('route'))?.long_name || ''
-              const city = addressComponents.find(c => c.types.includes('locality'))?.long_name || ''
-              const state = addressComponents.find(c => c.types.includes('administrative_area_level_1'))?.long_name || ''
-              const zipcode = addressComponents.find(c => c.types.includes('postal_code'))?.long_name || ''
-              
-              let streetAddress = ''
-              if (streetNumber && route) {
-                streetAddress = `${streetNumber} ${route}`
-              } else if (route) {
-                streetAddress = route
-              }
-              
-              setBillingData(prev => ({
-                ...prev,
-                address: streetAddress,
-                city,
-                state,
-                zipcode
-              }))
-            }
-          } catch (error) {
-            console.error("Error fetching location data:", error)
-          } finally {
-            setIsFetchingLocation(false)
+      try {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 10000,
+            enableHighAccuracy: false
+          })
+        })
+        
+        const { latitude, longitude } = position.coords
+        
+        // Use free geocoding service
+        const response = await axios.get(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+        )
+        
+        if (response.data) {
+          const locationData = response.data
+          
+          // Auto-fill the billing form
+          setBillingData(prev => ({
+            ...prev,
+            city: locationData.city || locationData.locality || '',
+            state: locationData.principalSubdivision || '',
+            zipcode: locationData.postcode || ''
+          }))
+          
+          // Auto-set rental city to Dallas if we're in that area
+          const detectedCity = locationData.city || locationData.locality || ''
+          if (detectedCity && Object.keys(cityLocations).some(city => 
+            detectedCity.toLowerCase().includes(city.toLowerCase()))) {
+            setRentalData(prev => ({ ...prev, city: "Dallas" }))
           }
-        },
-        (error) => {
-          console.error("Geolocation error:", error)
-          setIsFetchingLocation(false)
+          
+          console.log("Location auto-filled successfully")
         }
-      )
+      } catch (error) {
+        console.log("Auto-location failed, user will enter manually:", error)
+      } finally {
+        setIsFetchingLocation(false)
+      }
     }
-  }, [currentStep])
+  }
+
+  autoFillLocation()
+}, [currentStep, billingData.city]) // Only run when step changes or city is empty
+
+// Manual location fetch function
+const handleManualLocationFetch = async () => {
+  if (!navigator.geolocation) {
+    setSubmitMessage("Geolocation is not supported by your browser")
+    return
+  }
+
+  setIsFetchingLocation(true)
+  setSubmitMessage("")
+  
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 15000,
+        enableHighAccuracy: false
+      })
+    })
+    
+    const { latitude, longitude } = position.coords
+    
+    const response = await axios.get(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+    )
+    
+    if (response.data) {
+      const locationData = response.data
+      setBillingData(prev => ({
+        ...prev,
+        address: `${locationData.localityInfo?.informative?.[0]?.name || ''} ${locationData.localityInfo?.informative?.[1]?.name || ''}`.trim(),
+        city: locationData.city || locationData.locality || '',
+        state: locationData.principalSubdivision || '',
+        zipcode: locationData.postcode || ''
+      }))
+      
+      const detectedCity = locationData.city || locationData.locality || ''
+      if (detectedCity && Object.keys(cityLocations).some(city => 
+        detectedCity.toLowerCase().includes(city.toLowerCase()))) {
+        setRentalData(prev => ({ ...prev, city: "Dallas" }))
+      }
+      
+      setSubmitMessage("Location detected successfully!")
+    }
+  } catch (error) {
+    console.error("Manual location fetch failed:", error)
+    setSubmitMessage("Failed to get your location. Please enter it manually.")
+  } finally {
+    setIsFetchingLocation(false)
+  }
+}
 
   const [loginStateUpdated, setLoginStateUpdated] = useState(false);
   const handleLoginSuccess = async () => {
@@ -513,7 +570,7 @@ const fetchBookedDates = async (vehicleId) => {
 
   // Step validation functions
   const validateStep1 = () => {
-    return billingData.name && billingData.email && billingData.phone && billingData.address
+    return billingData.name && billingData.email && billingData.phone && billingData.address && billingData.city && billingData.state && billingData.zipcode
   }
 
   const validateStep2 = () => {
@@ -527,54 +584,374 @@ const fetchBookedDates = async (vehicleId) => {
     return true
   }
 
+  // Helper functions to determine customer type
+const isGoogleCustomer = () => {
+  return authType === 'google' || (customerId && customerId.startsWith('google_'));
+};
+
+const getCustomerIdentifier = () => {
+  if (!customerId) return null;
+  
+  if (isGoogleCustomer()) {
+    return customerId.replace('google_', '');
+  }
+  
+  return customerId;
+};
+
+const getCustomerFieldName = () => {
+  return isGoogleCustomer() ? 'google_customer' : 'customer';
+};
+
   // Payment Functions
-  const createTemporaryBooking = async () => {
-    try {
-      const formData = new FormData();
-      formData.append("customer", customerId.toString());
-      formData.append("vehicle", vehicle?.id || "");
-      formData.append("total_payment", calculateTotalPrice().toString());
-      formData.append("name", billingData.name);
-      formData.append("email", billingData.email);
-      formData.append("Phone_number", billingData.phone);
-      formData.append("Address", billingData.address);
-      formData.append("Town", billingData.city);
-      formData.append("pick_up_location", rentalData.pickupLocation);
-      formData.append("pick_up_Date", rentalData.pickupDate);
-      formData.append("pick_up_time", rentalData.pickupTime);
-      formData.append("Drop_off_location", rentalData.dropoffLocation);
-      formData.append("drop_of_Date", rentalData.dropoffDate);
-      formData.append("drop_of_time", rentalData.dropoffTime);
-      formData.append("flight_number", rentalData.flightNumber);
-      formData.append("status", "pending");
-
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/booking/booking/`, 
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-
-      console.log('[Booking] Temporary booking response:', response.data);
-      
-      if (response.data.status === "success" && response.data.data?.id) {
-        return {
-          success: true,
-          bookingId: response.data.data.id
-        };
-      } else {
-        return {
-          success: false,
-          message: response.data.message || "Booking creation failed"
-        };
+// Fixed updateBookingStatus function
+// Fixed updateBookingStatus function - includes customer field
+const updateBookingStatus = async (bookingId, status) => {
+  try {
+    console.log(`[Booking] Updating status to ${status} for booking:`, bookingId);
+    
+    // Determine customer field inline
+    const isGoogleAuth = authType === 'google' || (customerId && customerId.toString().startsWith('google_'));
+    const customerFieldName = isGoogleAuth ? 'google_customer' : 'customer';
+    const customerIdentifier = isGoogleAuth ? customerId.toString().replace('google_', '') : customerId.toString();
+    
+    // Build the update payload with customer field
+    const updatePayload = {
+      status: status,
+      [customerFieldName]: customerIdentifier
+    };
+    
+    console.log('[Booking] Update payload:', updatePayload);
+    
+    const response = await axios.patch(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/booking/booking/${bookingId}/`,
+      updatePayload,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       }
-    } catch (error) {
-      console.error("[Booking] Error creating temporary booking:", error);
+    );
+
+    console.log(`[Booking] Status updated to ${status}:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[Booking] Error updating status:", error);
+    console.error("[Booking] Error response:", error.response?.data);
+    throw error;
+  }
+};
+
+// Fixed createTemporaryBooking function
+const createTemporaryBooking = async () => {
+  try {
+    const formData = new FormData();
+    
+    // Determine customer field inline
+    const isGoogleAuth = authType === 'google' || (customerId && customerId.toString().startsWith('google_'));
+    const customerFieldName = isGoogleAuth ? 'google_customer' : 'customer';
+    const customerIdentifier = isGoogleAuth ? customerId.toString().replace('google_', '') : customerId.toString();
+    
+    console.log('[Booking] Creating temporary booking with:', {
+      customerField: customerFieldName,
+      customerId: customerIdentifier,
+      authType: authType,
+      vehicleId: vehicle?.id
+    });
+    
+    // Append ONLY the correct customer field
+    formData.append(customerFieldName, customerIdentifier);
+    
+    formData.append("vehicle", vehicle?.id || "");
+    formData.append("total_payment", calculateTotalPrice().toString());
+    formData.append("name", billingData.name);
+    formData.append("email", billingData.email);
+    formData.append("Phone_number", billingData.phone);
+    formData.append("Address", billingData.address);
+    formData.append("Town", billingData.city);
+    formData.append("pick_up_location", rentalData.pickupLocation);
+    formData.append("pick_up_Date", rentalData.pickupDate);
+    formData.append("pick_up_time", rentalData.pickupTime);
+    formData.append("Drop_off_location", rentalData.dropoffLocation);
+    formData.append("drop_of_Date", rentalData.dropoffDate);
+    formData.append("drop_of_time", rentalData.dropoffTime);
+    formData.append("flight_number", rentalData.flightNumber);
+    formData.append("status", "pending");
+
+    // Log form data to verify only one customer field
+    console.log('[Booking] FormData contents:');
+    for (let pair of formData.entries()) {
+      console.log(`[Booking FormData] ${pair[0]}:`, pair[1]);
+    }
+
+    const response = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/booking/booking/`, 
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+
+    console.log('[Booking] Temporary booking response:', response.data);
+    
+    if (response.data.status === "success" && response.data.data?.id) {
+      return {
+        success: true,
+        bookingId: response.data.data.id
+      };
+    } else {
       return {
         success: false,
-        message: error.response?.data?.detail || "Booking creation error"
+        message: response.data.message || "Booking creation failed"
       };
     }
-  };
+  } catch (error) {
+    console.error("[Booking] Error creating temporary booking:", error);
+    console.error("[Booking] Error details:", error.response?.data);
+    return {
+      success: false,
+      message: error.response?.data?.detail || "Booking creation error"
+    };
+  }
+};
+
+// Fixed handleDocUpload function
+// Add this helper function to compress images
+const compressImage = async (file, maxSizeMB = 2) => {
+  return new Promise((resolve, reject) => {
+    // If it's a PDF, don't compress
+    if (file.type === 'application/pdf') {
+      resolve(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Maximum dimensions
+        const MAX_WIDTH = 1920;
+        const MAX_HEIGHT = 1920;
+        
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Start with quality 0.8 and reduce if needed
+        let quality = 0.8;
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              
+              console.log(`[Compression] Original: ${(file.size / 1024 / 1024).toFixed(2)}MB, Compressed: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+              resolve(compressedFile);
+            } else {
+              reject(new Error('Compression failed'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+};
+
+// Improved handleDocUpload with compression and validation
+const handleDocUpload = async () => {
+  if (!uploadedDocs || uploadedDocs.length === 0) {
+    setSubmitMessage("Please upload at least one document");
+    return;
+  }
+
+  if (!customerId || !bookingId || !billingData.email) {
+    setSubmitMessage("Missing booking information. Please restart the process.");
+    return;
+  }
+
+  setIsSubmitting(true);
+  setSubmitMessage("Processing and compressing files...");
+
+  try {
+    console.log('[Document Upload] Starting document upload process');
+    console.log('[Document Upload] Files to process:', uploadedDocs.length);
+
+    // Compress all images
+    const processedFiles = [];
+    for (let i = 0; i < uploadedDocs.length; i++) {
+      const file = uploadedDocs[i];
+      
+      // Check file size before processing
+      const fileSizeMB = file.size / 1024 / 1024;
+      console.log(`[Document Upload] Processing file ${i + 1}: ${file.name} (${fileSizeMB.toFixed(2)}MB)`);
+      
+      // Skip files larger than 10MB before compression
+      if (fileSizeMB > 10) {
+        setSubmitMessage(`File "${file.name}" is too large (${fileSizeMB.toFixed(2)}MB). Please use files under 10MB.`);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      try {
+        const processedFile = await compressImage(file, 2);
+        processedFiles.push(processedFile);
+        
+        setSubmitMessage(`Processing files... (${i + 1}/${uploadedDocs.length})`);
+      } catch (error) {
+        console.error(`[Document Upload] Error processing file ${file.name}:`, error);
+        setSubmitMessage(`Failed to process file: ${file.name}`);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    // Check total size after compression
+    const totalSize = processedFiles.reduce((sum, file) => sum + file.size, 0);
+    const totalSizeMB = totalSize / 1024 / 1024;
+    console.log(`[Document Upload] Total size after compression: ${totalSizeMB.toFixed(2)}MB`);
+
+    if (totalSizeMB > 8) {
+      setSubmitMessage(`Total file size is too large (${totalSizeMB.toFixed(2)}MB). Please reduce the number of files or their quality. Maximum allowed: 8MB total.`);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setSubmitMessage("Uploading files...");
+
+    // Create FormData
+    const formData = new FormData();
+    
+    // Determine customer field inline
+    const isGoogleAuth = authType === 'google' || (customerId && customerId.toString().startsWith('google_'));
+    const customerFieldName = isGoogleAuth ? 'google_customer' : 'customer';
+    const customerIdentifier = isGoogleAuth ? customerId.toString().replace('google_', '') : customerId.toString();
+    
+    console.log('[Document Upload] Using customer field:', customerFieldName, 'with ID:', customerIdentifier);
+    
+    // Append ONLY the correct customer field
+    formData.append(customerFieldName, customerIdentifier);
+    
+    // Add other required fields
+    formData.append("booking", bookingId.toString());
+    formData.append("customer_email", billingData.email);
+    
+    // Add payment
+    if (paymentData.paymentId) {
+      formData.append("payment", paymentData.paymentId.toString());
+    } else {
+      formData.append("payment", bookingId.toString());
+    }
+    
+    // Append processed files
+    processedFiles.forEach((file, index) => {
+      console.log(`[Document Upload] Appending file ${index + 1}:`, file.name, file.type, `${(file.size / 1024).toFixed(2)}KB`);
+      formData.append("licence_images", file, file.name);
+    });
+
+    console.log('[Document Upload] Sending request to API...');
+    
+    const uploadResponse = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/licence/licence/`, 
+      formData,
+      { 
+        headers: { 
+          "Content-Type": "multipart/form-data",
+        },
+        timeout: 60000, // 60 seconds for large uploads
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setSubmitMessage(`Uploading... ${percentCompleted}%`);
+        }
+      }
+    );
+
+    console.log("✅ Document upload successful:", uploadResponse.data);
+    
+    setIsDocUploadOpen(false);
+    setIsThankYouOpen(true);
+    setSubmitMessage("Documents uploaded successfully! Your booking is now complete.");
+    
+  } catch (error) {
+    console.error("❌ Document upload failed:", error);
+    console.error("Error details:", {
+      message: error.message,
+      code: error.code,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    
+    let errorMessage = "Document upload failed. Please try again.";
+    
+    if (error.code === 'ERR_NETWORK') {
+      errorMessage = "Network error. Please check your internet connection and try again.";
+    } else if (error.response?.status === 413) {
+      errorMessage = "Files are too large even after compression. Please upload smaller files or fewer files.";
+    } else if (error.response?.status === 415) {
+      errorMessage = "Unsupported file type. Please upload JPG, PNG, or PDF files.";
+    } else if (error.response?.data?.message) {
+      errorMessage = `Upload failed: ${error.response.data.message}`;
+    } else if (error.response?.data?.detail) {
+      errorMessage = `Upload failed: ${error.response.data.detail}`;
+    } else if (error.response?.data?.data?.non_field_errors) {
+      const fieldErrors = error.response.data.data.non_field_errors;
+      errorMessage = `Validation error: ${fieldErrors.join(', ')}`;
+    } else if (error.response?.data?.non_field_errors) {
+      const fieldErrors = error.response.data.non_field_errors;
+      errorMessage = `Validation error: ${fieldErrors.join(', ')}`;
+    }
+    
+    setSubmitMessage(errorMessage);
+    
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+// Updated file input handler with validation
+const handleFileSelect = (e) => {
+  const files = Array.from(e.target.files);
+  
+  // Validate file types
+  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+  const invalidFiles = files.filter(file => !validTypes.includes(file.type));
+  
+  if (invalidFiles.length > 0) {
+    setSubmitMessage(`Invalid file types: ${invalidFiles.map(f => f.name).join(', ')}. Please use JPG, PNG, or PDF files only.`);
+    return;
+  }
+  
+  // Validate number of files
+  if (files.length > 5) {
+    setSubmitMessage("Maximum 5 files allowed. Please select fewer files.");
+    return;
+  }
+  
+  setUploadedDocs(e.target.files);
+  setSubmitMessage("");
+};
 
   const createPaymentIntent = async (bookingId) => {
     try {
@@ -652,22 +1029,7 @@ const fetchBookedDates = async (vehicleId) => {
     }
   };
 
-  const updateBookingStatus = async (bookingId, status) => {
-    try {
-      const response = await axios.patch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/booking/booking/${bookingId}/`,
-        {
-          status: status
-        }
-      );
 
-      console.log(`[Booking] Status updated to ${status}:`, response.data);
-      return response.data;
-    } catch (error) {
-      console.error("[Booking] Error updating status:", error);
-      throw error;
-    }
-  };
 
   const cleanupTemporaryBooking = async (bookingId) => {
     try {
@@ -902,91 +1264,7 @@ const checkVehicleAvailability = async () => {
     };
   }, [bookingId, currentStep]);
 
-  const handleDocUpload = async () => {
-    if (!uploadedDocs || uploadedDocs.length === 0) {
-      setSubmitMessage("Please upload at least one document");
-      return;
-    }
 
-    if (!customerId || !bookingId || !billingData.email) {
-      setSubmitMessage("Missing booking information. Please restart the process.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitMessage("");
-    
-    try {
-      console.log('[Document Upload] Starting document upload process');
-      console.log('[Document Upload] Booking ID:', bookingId);
-      console.log('[Document Upload] Customer ID:', customerId);
-      console.log('[Document Upload] Files:', uploadedDocs);
-
-      const formData = new FormData();
-      formData.append("customer", customerId.toString());
-      formData.append("booking", bookingId.toString());
-      formData.append("customer_email", billingData.email);
-      formData.append("payment", paymentData.paymentId || bookingId.toString());
-      
-      // Append each file individually
-      Array.from(uploadedDocs).forEach((file, index) => {
-        console.log(`[Document Upload] Appending file ${index + 1}:`, file.name, file.type, file.size);
-        formData.append("licence_images", file, file.name);
-      });
-
-      // Log FormData contents for debugging
-      for (let pair of formData.entries()) {
-        console.log(`[FormData] ${pair[0]}:`, pair[1]);
-      }
-
-      console.log('[Document Upload] Sending request to API...');
-      
-      const uploadResponse = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/licence/licence/`, 
-        formData,
-        { 
-          headers: { 
-            "Content-Type": "multipart/form-data",
-          },
-          timeout: 30000, // 30 second timeout
-        }
-      );
-
-      console.log("Document upload successful:", uploadResponse.data);
-      
-      // Show success message and close modal
-      setIsDocUploadOpen(false);
-      setIsThankYouOpen(true);
-      setSubmitMessage("Documents uploaded successfully! Your booking is now complete.");
-      
-    } catch (error) {
-      console.error("Document upload failed:", error);
-      console.error("Error details:", {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
-      let errorMessage = "Document upload failed. Please try again.";
-      
-      if (error.code === 'ERR_NETWORK') {
-        errorMessage = "Network error. Please check your internet connection and try again.";
-      } else if (error.response?.status === 413) {
-        errorMessage = "File too large. Please upload smaller files.";
-      } else if (error.response?.status === 415) {
-        errorMessage = "Unsupported file type. Please upload JPG, PNG, or PDF files.";
-      } else if (error.response?.data?.message) {
-        errorMessage = `Upload failed: ${error.response.data.message}`;
-      } else if (error.response?.data?.detail) {
-        errorMessage = `Upload failed: ${error.response.data.detail}`;
-      }
-      
-      setSubmitMessage(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   useEffect(() => {
     const incompleteBooking = localStorage.getItem('incompleteBooking');
@@ -1172,21 +1450,21 @@ const checkVehicleAvailability = async () => {
                       onChange={(e) => handleBillingChange("address", e.target.value)}
                       className="w-full px-4 py-3 bg-gray-50 border text-black border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                    <input
-                      type="text"
-                      placeholder="City"
-                      value={billingData.city}
-                      onChange={(e) => handleBillingChange("city", e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 text-black border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      disabled={isFetchingLocation}
-                    />
-                    {isFetchingLocation && (
-                      <p className="text-xs text-gray-500 mt-1">Detecting your location...</p>
-                    )}
-                  </div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+  <input
+    type="text"
+    placeholder="City"
+    value={billingData.city}
+    onChange={(e) => handleBillingChange("city", e.target.value)}
+    className="w-full px-4 py-3 bg-gray-50 text-black border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+  {isFetchingLocation && (
+    <p className="text-xs text-gray-500 mt-1">Detecting your location...</p>
+  )}
+</div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
                     <input
@@ -1797,13 +2075,15 @@ const checkVehicleAvailability = async () => {
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Upload Documents</label>
             <input
-              type="file"
-              multiple
-              accept="image/*,.pdf"
-              onChange={(e) => setUploadedDocs(e.target.files)}
-              className="block w-full text-md p-2 text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-sm text-gray-500 mt-1">Accepted formats: JPG, PNG, PDF</p>
+  type="file"
+  multiple
+  accept="image/*,.pdf"
+  onChange={handleFileSelect}  // Changed from inline handler
+  className="block w-full text-md p-2 text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+/>
+<p className="text-sm text-gray-500 mt-1">
+  Accepted formats: JPG, PNG, PDF (Max 5 files, 10MB each)
+</p>
           </div>
           
           <div className="flex justify-end space-x-3">
@@ -1838,7 +2118,7 @@ const checkVehicleAvailability = async () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Thank You!</h2>
+          <h2 className="text-xl font-semibold mb-2 text-black">Thank You!</h2>
           <p className="text-gray-600 mb-6">Your booking is now complete. We have sent a confirmation to your email.</p>
           <button
             onClick={closeThankYouModal}

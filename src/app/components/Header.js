@@ -135,14 +135,14 @@ export default function Header() {
 
               {isLoggedIn && (
   <div className="hidden md:flex items-center gap-4">
-    {isProfile && (
+    {/* {isProfile && (
       <Link 
         href="/vehicleform" 
         className="px-4 py-2 text-sm rounded-md font-medium bg-gray-100 text-orange-400 hover:bg-gray-200 transition-colors duration-300"
       >
         Rent Your Car
       </Link>
-    )}
+    )} */}
     
     {/* Updated Profile Section */}
     <div className="group relative">
@@ -266,7 +266,7 @@ export default function Header() {
                 ...(isLoggedIn
                   ? [
                       { href: "/profile", label: "My Profile", delay: 400 },
-                      { href: "/vehicleform", label: "Rent Your Car", delay: 450 },
+                      // { href: "/vehicleform", label: "Rent Your Car", delay: 450 },
 
                       { 
                         label: "Logout", 

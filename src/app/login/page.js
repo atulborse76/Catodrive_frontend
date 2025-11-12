@@ -58,23 +58,33 @@ export default function LoginPage() {
       const responseData = await verifyResponse.json();
       console.log('✅ Google login successful:', responseData);
       
-      // Store tokens - FIXED: Use actual response structure
-      localStorage.setItem('token', responseData.access);           // Changed from access_token
-      localStorage.setItem('refresh_token', responseData.refresh);  // Changed from refresh_token
+      // Store tokens
+      localStorage.setItem('token', responseData.access);
+      localStorage.setItem('refresh_token', responseData.refresh);
       
-      // Create user data object from the flat response structure
+      // Create user data object
       const userData = {
         email: responseData.email,
         name: responseData.name,
-        username: responseData.username
+        username: responseData.username,
+        // Add a flag to identify Google users
+        isGoogleUser: true,
+        // Store the actual customer ID from backend response
+        customerId: responseData.customer_id || responseData.id || responseData.username
       };
       
       localStorage.setItem('userData', JSON.stringify(userData));
       
-      // Use username as identifier since there's no id field
-      localStorage.setItem('customerId', responseData.username); // or responseData.email
+      // Store customer ID with prefix to identify Google users
+      const customerIdentifier = `google_${responseData.customer_id || responseData.id || responseData.username}`;
+      localStorage.setItem('customerId', customerIdentifier);
+      localStorage.setItem('authType', 'google'); // Add auth type
       
-      console.log('💾 Google login tokens stored');
+      console.log('💾 Google login data stored:', { 
+        customerIdentifier, 
+        userData 
+      });
+      
       setGoogleAuthStatus('success');
       
       // IMPORTANT: Dispatch auth change event to update header
@@ -155,8 +165,6 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log('📝 Regular login form submitted');
-    console.log('📧 Email:', email);
-    console.log('🔒 Password length:', password.length);
     
     setError("");
     setIsLoading(true);
@@ -185,9 +193,15 @@ export default function LoginPage() {
       localStorage.setItem('token', responseData.access_token);
       localStorage.setItem('refresh_token', responseData.refresh_token);
       localStorage.setItem('userData', JSON.stringify(responseData.data));
-      localStorage.setItem('customerId', responseData.data.id);
       
-      console.log('💾 Regular login tokens stored');
+      // Store regular customer ID (numeric)
+      localStorage.setItem('customerId', responseData.data.id.toString());
+      localStorage.setItem('authType', 'regular'); // Add auth type
+      
+      console.log('💾 Regular login data stored:', { 
+        customerId: responseData.data.id,
+        authType: 'regular'
+      });
       
       // IMPORTANT: Dispatch auth change event to update header
       dispatchAuthChange();

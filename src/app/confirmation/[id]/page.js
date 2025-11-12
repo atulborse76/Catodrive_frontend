@@ -479,7 +479,7 @@ useEffect(() => {
                 <Mail className="h-6 w-6 text-blue-600 mr-4" />
                 <div>
                   <p className="font-medium text-gray-800">Email Support</p>
-                  <p className="text-blue-600 font-bold">support@carrental.com</p>
+                  <p className="text-blue-600 font-bold">support@catodrive.com</p>
                 </div>
               </div>
             </div>
